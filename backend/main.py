@@ -43,14 +43,19 @@ db_models.Base.metadata.create_all(bind=engine)
 # FastAPI Application
 # ==========================================
 
-app = FastAPI(
-    title="AI Credit Delinquency Prediction API"
-)
+app = FastAPI()
+
+origins = [
+    "http://localhost:3000",
+    "https://ai-credit-delinquency.vercel.app",
+]
+
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
