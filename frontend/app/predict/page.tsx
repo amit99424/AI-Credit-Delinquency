@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Papa from "papaparse";
 import DashboardLayout from "../../components/DashboardLayout";
 import {
     createPrediction,
@@ -123,6 +124,50 @@ export default function PredictionPage() {
     // Submit Prediction
     // ==========================================
 
+    const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+
+            complete: (results) => {
+                const rows = results.data as Record<string, string>[];
+
+                if (!rows.length) {
+                    alert("CSV file is empty.");
+                    return;
+                }
+
+                // First customer/row from CSV
+                const row = rows[0];
+
+                const updatedForm: typeof initialForm = {
+                    ...initialForm,
+                };
+
+                Object.keys(initialForm).forEach((key) => {
+                    const typedKey = key as keyof typeof initialForm;
+
+                    if (row[key] !== undefined) {
+                        updatedForm[typedKey] = String(row[key]).trim();
+                    }
+                });
+
+                setForm(updatedForm);
+
+                alert("CSV data loaded successfully!");
+            },
+
+            error: (error) => {
+                console.error("CSV Error:", error);
+                alert("Failed to read CSV file.");
+            },
+        });
+    };
+
     async function handleSubmit(
         event: FormEvent<HTMLFormElement>
     ) {
@@ -179,6 +224,28 @@ export default function PredictionPage() {
                 onSubmit={handleSubmit}
                 className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
             >
+                <div className="mb-8 rounded-xl border border-blue-200 bg-blue-50 p-6">
+                    <h2 className="text-xl font-semibold text-slate-900">
+                        Upload Customer Data
+                    </h2>
+
+                    <p className="mt-1 mb-4 text-sm text-slate-600">
+                        Upload a CSV file to automatically fill the customer credit information.
+                    </p>
+
+                    <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleCSVUpload}
+                        className="block w-full max-w-md rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-700
+        file:mr-4 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2
+        file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
+                    />
+
+                    <p className="mt-3 text-xs text-slate-500">
+                        The first customer record from the CSV will be loaded into the form.
+                    </p>
+                </div>
                 {/* ======================================
               Customer Selection
           ====================================== */}
