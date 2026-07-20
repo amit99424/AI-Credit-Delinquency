@@ -126,6 +126,40 @@ class CustomerData(BaseModel):
     PAY_AMT5: float
     PAY_AMT6: float
 
+class BulkCustomerData(BaseModel):
+    name: str
+    email: str
+
+    LIMIT_BAL: float
+    SEX: int
+    EDUCATION: int
+    MARRIAGE: int
+    AGE: int
+
+    PAY_0: int
+    PAY_2: int
+    PAY_3: int
+    PAY_4: int
+    PAY_5: int
+    PAY_6: int
+
+    BILL_AMT1: float
+    BILL_AMT2: float
+    BILL_AMT3: float
+    BILL_AMT4: float
+    BILL_AMT5: float
+    BILL_AMT6: float
+
+    PAY_AMT1: float
+    PAY_AMT2: float
+    PAY_AMT3: float
+    PAY_AMT4: float
+    PAY_AMT5: float
+    PAY_AMT6: float
+    
+class BulkPredictionRequest(BaseModel):
+    customers: list[BulkCustomerData]
+
 security = HTTPBearer()
 
 def create_access_token(data: dict):
@@ -166,6 +200,109 @@ def verify_token(
             status_code=401,
             detail="Invalid or expired token"
         )
+        
+# ==========================================
+# User Signup
+# ==========================================
+
+@app.post("/signup")
+def signup(
+    user: UserRegister,
+    db: Session = Depends(get_db)
+):
+    # Check if email already exists
+    existing_user = (
+        db.query(db_models.User)
+        .filter(db_models.User.email == user.email)
+        .first()
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="User with this email already exists"
+        )
+
+    # Hash password
+    hashed_password = bcrypt.hashpw(
+        user.password.encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")
+
+    # Create new user
+    new_user = db_models.User(
+        name=user.name,
+        email=user.email,
+        hashed_password=hashed_password
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "status": "success",
+        "message": "User registered successfully",
+        "user": {
+            "id": new_user.id,
+            "name": new_user.name,
+            "email": new_user.email
+        }
+    }
+
+
+# ==========================================
+# User Login
+# ==========================================
+
+@app.post("/login")
+def login(
+    user: UserLogin,
+    db: Session = Depends(get_db)
+):
+    # Find user by email
+    existing_user = (
+        db.query(db_models.User)
+        .filter(db_models.User.email == user.email)
+        .first()
+    )
+
+    # Check user exists
+    if not existing_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    # Check password
+    password_valid = bcrypt.checkpw(
+        user.password.encode("utf-8"),
+        existing_user.hashed_password.encode("utf-8")
+    )
+
+    if not password_valid:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    # Create JWT token
+    access_token = create_access_token({
+        "sub": str(existing_user.id),
+        "email": existing_user.email
+    })
+
+    return {
+        "status": "success",
+        "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": existing_user.id,
+            "name": existing_user.name,
+            "email": existing_user.email
+        }
+    }
 
 # ==========================================
 # Home
@@ -406,161 +543,440 @@ def predict_credit_risk(
     }
     
 # ==========================================
-# Get All Prediction History
+# Get Predictions - Pagination + Optimized
 # ==========================================
 
 @app.get("/predictions")
 def get_predictions(
+    page: int = 1,
+    limit: int = 50,
     db: Session = Depends(get_db),
     current_user: dict = Depends(verify_token)
 ):
-    predictions = (
+    # Validate page
+    if page < 1:
+        page = 1
+
+    # Limit maximum records per request
+    if limit < 1:
+        limit = 50
+
+    if limit > 100:
+        limit = 100
+
+    # ==========================================
+    # Get Total Prediction Count
+    # ==========================================
+
+    total_predictions = (
+        db.query(db_models.Prediction)
+        .count()
+    )
+
+    # Calculate total pages
+    total_pages = (
+        total_predictions + limit - 1
+    ) // limit
+
+    # Calculate offset
+    offset = (page - 1) * limit
+
+    # ==========================================
+    # Get Only Current Page Records
+    # Single JOIN Query
+    # ==========================================
+
+    records = (
         db.query(
             db_models.Prediction,
             db_models.Customer
         )
-        .join(
+        .outerjoin(
             db_models.Customer,
-            db_models.Prediction.customer_id == db_models.Customer.id
+            db_models.Prediction.customer_id
+            == db_models.Customer.id
         )
         .order_by(
-            db_models.Prediction.created_at.desc()
+            db_models.Prediction.id.desc()
         )
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
+    # ==========================================
+    # Format Results
+    # ==========================================
+
+    results = []
+
+    for prediction, customer in records:
+
+        results.append({
+            "prediction_id": prediction.id,
+
+            "customer_id":
+                prediction.customer_id,
+
+            "customer_name":
+                customer.name
+                if customer
+                else "Unknown Customer",
+
+            "customer_email":
+                customer.email
+                if customer
+                else "N/A",
+
+            "default_probability":
+                prediction.default_probability,
+
+            "risk_level":
+                prediction.risk_level,
+
+            "prediction":
+                prediction.prediction,
+
+            "created_at":
+                prediction.created_at.isoformat()
+                if prediction.created_at
+                else None
+        })
+
+    # ==========================================
+    # Response
+    # ==========================================
+
     return {
         "status": "success",
-        "total_predictions": len(predictions),
-        "predictions": [
-            {
-                "prediction_id": prediction.id,
-                "customer_id": customer.id,
-                "customer_name": customer.name,
-                "customer_email": customer.email,
-                "default_probability": prediction.default_probability,
-                "risk_level": prediction.risk_level,
-                "prediction": prediction.prediction,
-                "created_at": prediction.created_at
-            }
-            for prediction, customer in predictions
-        ]
+
+        "total_predictions":
+            total_predictions,
+
+        "current_page":
+            page,
+
+        "total_pages":
+            total_pages,
+
+        "limit":
+            limit,
+
+        "predictions":
+            results
     }
-    
-@app.post("/register")
-def register_user(
-    user: UserRegister,
-    db: Session = Depends(get_db)
+
+# ==========================================
+# Optimized Bulk AI Credit Risk Prediction
+# Maximum 500 Customers
+# ==========================================
+
+@app.post("/predict/bulk")
+def bulk_predict_credit_risk(
+    request: BulkPredictionRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_token)
 ):
     try:
-        # Check existing user
-        existing_user = (
-            db.query(db_models.User)
-            .filter(db_models.User.email == user.email)
-            .first()
+        customers = request.customers
+
+        # ==========================================
+        # Validation
+        # ==========================================
+
+        if not customers:
+            raise HTTPException(
+                status_code=400,
+                detail="No customer data provided"
+            )
+
+        if len(customers) > 500:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum 500 customers allowed per bulk prediction"
+            )
+
+        # ==========================================
+        # Prepare Customer Data
+        # ==========================================
+
+        customer_records = []
+        ml_records = []
+
+        for customer in customers:
+            data = customer.model_dump()
+
+            customer_name = data.pop("name")
+            customer_email = data.pop("email")
+
+            customer_records.append({
+                "name": customer_name,
+                "email": customer_email,
+                "age": data["AGE"],
+                "credit_limit": data["LIMIT_BAL"]
+            })
+
+            # Only ML features
+            ml_records.append(data)
+
+        # ==========================================
+        # Batch AI Prediction
+        # Model Called Only Once
+        # ==========================================
+
+        input_data = pd.DataFrame(ml_records)
+
+        probabilities = model.predict_proba(
+            input_data
+        )[:, 1]
+
+        predictions = model.predict(
+            input_data
         )
 
-        if existing_user:
-            return {
-                "status": "error",
-                "message": "User with this email already exists"
-            }
-            
-                # Hash password
-        password_bytes = user.password.encode("utf-8")
+        # ==========================================
+        # Get Existing Customers in One Query
+        # ==========================================
 
-        hashed_password = bcrypt.hashpw(
-            password_bytes,
-            bcrypt.gensalt()
-        ).decode("utf-8")
+        emails = [
+            record["email"]
+            for record in customer_records
+        ]
 
-        # Create new user
-        new_user = db_models.User(
-            name=user.name,
-            email=user.email,
-            hashed_password=hashed_password,
-            role="admin"
+        existing_customers = (
+            db.query(db_models.Customer)
+            .filter(
+                db_models.Customer.email.in_(emails)
+            )
+            .all()
         )
 
-        db.add(new_user)
+        # Create email → customer map
+        customer_map = {
+            customer.email: customer
+            for customer in existing_customers
+        }
+
+        # ==========================================
+        # Create New Customers
+        # ==========================================
+
+        new_customers = []
+
+        for record in customer_records:
+
+            if record["email"] not in customer_map:
+
+                new_customer = db_models.Customer(
+                    name=record["name"],
+                    email=record["email"],
+                    age=record["age"],
+                    credit_limit=record["credit_limit"]
+                )
+
+                new_customers.append(
+                    new_customer
+                )
+
+        # Add all new customers
+        if new_customers:
+
+            db.add_all(
+                new_customers
+            )
+
+            # Generate database IDs
+            db.flush()
+
+            # Add new customers to map
+            for customer in new_customers:
+
+                customer_map[
+                    customer.email
+                ] = customer
+
+        # ==========================================
+        # Prepare Prediction Results
+        # ==========================================
+
+        results = []
+
+        prediction_objects = []
+
+        for index, record in enumerate(
+            customer_records
+        ):
+
+            customer = customer_map[
+                record["email"]
+            ]
+
+            probability = float(
+                probabilities[index]
+            )
+
+            prediction_value = int(
+                predictions[index]
+            )
+
+            # ======================================
+            # Risk Classification
+            # ======================================
+
+            if probability < 0.30:
+
+                risk_level = "LOW RISK"
+
+            elif probability < 0.60:
+
+                risk_level = "MEDIUM RISK"
+
+            else:
+
+                risk_level = "HIGH RISK"
+
+            # ======================================
+            # Prediction Text
+            # ======================================
+
+            prediction_text = (
+                "Likely to default"
+                if prediction_value == 1
+                else "Unlikely to default"
+            )
+
+            probability_percentage = round(
+                probability * 100,
+                2
+            )
+
+            # ======================================
+            # Create Prediction Object
+            # ======================================
+
+            prediction_object = (
+                db_models.Prediction(
+                    customer_id=customer.id,
+                    default_probability=probability_percentage,
+                    risk_level=risk_level,
+                    prediction=prediction_text
+                )
+            )
+
+            prediction_objects.append(
+                prediction_object
+            )
+
+            # ======================================
+            # API Result
+            # ======================================
+
+            results.append({
+                "customer_id":
+                    customer.id,
+
+                "customer_name":
+                    customer.name,
+
+                "customer_email":
+                    customer.email,
+
+                "default_probability":
+                    probability_percentage,
+
+                "risk_level":
+                    risk_level,
+
+                "prediction":
+                    prediction_text
+            })
+
+        # ==========================================
+        # Bulk Save Predictions
+        # ==========================================
+
+        db.add_all(
+            prediction_objects
+        )
+
+        # Only one database commit
         db.commit()
-        db.refresh(new_user)
+
+        # ==========================================
+        # Calculate Summary
+        # ==========================================
+
+        low_risk = sum(
+            result["risk_level"] == "LOW RISK"
+            for result in results
+        )
+
+        medium_risk = sum(
+            result["risk_level"] == "MEDIUM RISK"
+            for result in results
+        )
+
+        high_risk = sum(
+            result["risk_level"] == "HIGH RISK"
+            for result in results
+        )
+
+        likely_default = sum(
+            result["prediction"]
+            == "Likely to default"
+            for result in results
+        )
+
+        unlikely_default = (
+            len(results)
+            - likely_default
+        )
+
+        # ==========================================
+        # Response
+        # ==========================================
 
         return {
             "status": "success",
-            "message": "User registered successfully",
-            "user": {
-                "id": new_user.id,
-                "name": new_user.name,
-                "email": new_user.email,
-                "role": new_user.role
-            }
+
+            "message":
+                "Bulk prediction completed successfully",
+
+            "summary": {
+                "total_customers":
+                    len(results),
+
+                "low_risk":
+                    low_risk,
+
+                "medium_risk":
+                    medium_risk,
+
+                "high_risk":
+                    high_risk,
+
+                "likely_to_default":
+                    likely_default,
+
+                "unlikely_to_default":
+                    unlikely_default
+            },
+
+            "results":
+                results
         }
 
-    except Exception as e:
+    except HTTPException:
+
         db.rollback()
 
-        return {
-            "status": "error",
-            "message": str(e)
-        }
-        
-@app.post("/login")
-def login_user(
-    user: UserLogin,
-    db: Session = Depends(get_db)
-):
-    # Find user by email
-    existing_user = (
-        db.query(db_models.User)
-        .filter(db_models.User.email == user.email)
-        .first()
-    )
+        raise
 
-    if not existing_user:
+    except Exception as e:
+
+        db.rollback()
+
         raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
+            status_code=500,
+            detail=str(e)
         )
-
-    # Check password
-    password_valid = bcrypt.checkpw(
-        user.password.encode("utf-8"),
-        existing_user.hashed_password.encode("utf-8")
-    )
-
-    if not password_valid:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
-
-    # Generate JWT token
-    access_token = create_access_token({
-        "sub": str(existing_user.id),
-        "email": existing_user.email,
-        "role": existing_user.role
-    })
-
-    return {
-        "status": "success",
-        "message": "Login successful",
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": existing_user.id,
-            "name": existing_user.name,
-            "email": existing_user.email,
-            "role": existing_user.role
-        }
-    }
-
-@app.get("/protected")
-def protected_route(
-    current_user: dict = Depends(verify_token)
-):
-    return {
-        "status": "success",
-        "message": "You have access to this protected route",
-        "user": current_user
-    }

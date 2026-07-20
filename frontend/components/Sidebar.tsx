@@ -12,7 +12,15 @@ import {
   ChartNoAxesCombined,
   ShieldCheck,
   LogOut,
+  FileUp,
 } from "lucide-react";
+
+
+/*
+==========================================
+Sidebar Menu Items
+==========================================
+*/
 
 const menuItems = [
   {
@@ -31,6 +39,11 @@ const menuItems = [
     icon: BrainCircuit,
   },
   {
+    name: "Bulk Prediction",
+    href: "/predict/bulk",
+    icon: FileUp,
+  },
+  {
     name: "Prediction History",
     href: "/predictions",
     icon: History,
@@ -42,11 +55,25 @@ const menuItems = [
   },
 ];
 
+
+/*
+==========================================
+User Type
+==========================================
+*/
+
 type User = {
   name: string;
   email: string;
   role?: string;
 };
+
+
+/*
+==========================================
+Sidebar Component
+==========================================
+*/
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -54,21 +81,37 @@ export default function Sidebar() {
 
   const [user, setUser] = useState<User | null>(null);
 
-  // Get logged-in user from localStorage
+
+  /*
+  ==========================================
+  Get Logged-in User
+  ==========================================
+  */
+
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
 
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
+
         setUser(parsedUser);
       } catch (error) {
-        console.error("Failed to parse user data:", error);
+        console.error(
+          "Failed to parse user data:",
+          error
+        );
       }
     }
   }, []);
 
-  // Logout Function
+
+  /*
+  ==========================================
+  Logout Function
+  ==========================================
+  */
+
   const handleLogout = () => {
     // Remove JWT token
     localStorage.removeItem("access_token");
@@ -80,11 +123,16 @@ export default function Sidebar() {
     router.push("/login");
   };
 
+
   return (
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-slate-950 px-4 py-6 text-white">
 
-      {/* Brand */}
+      {/* ======================================
+          Brand
+      ====================================== */}
+
       <div className="mb-10 flex items-center gap-3 px-3">
+
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600">
           <ShieldCheck size={24} />
         </div>
@@ -98,14 +146,21 @@ export default function Sidebar() {
             Risk Intelligence
           </p>
         </div>
+
       </div>
 
-      {/* Navigation */}
+
+      {/* ======================================
+          Navigation
+      ====================================== */}
+
       <nav className="flex-1 space-y-2">
+
         {menuItems.map((item) => {
           const Icon = item.icon;
 
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href;
 
           return (
             <Link
@@ -117,33 +172,53 @@ export default function Sidebar() {
                   : "text-slate-400 hover:bg-slate-900 hover:text-white"
               }`}
             >
+
               <Icon size={19} />
 
               <span>
                 {item.name}
               </span>
+
             </Link>
           );
         })}
+
       </nav>
 
-      {/* Bottom Section */}
+
+      {/* ======================================
+          Bottom Section
+      ====================================== */}
+
       <div className="space-y-3">
 
-        {/* Logged In User */}
+
+        {/* ======================================
+            Logged In User
+        ====================================== */}
+
         {user && (
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+
             <div className="flex items-center gap-3">
 
               {/* User Avatar */}
+
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+
                 {user.name
-                  ? user.name.charAt(0).toUpperCase()
+                  ? user.name
+                      .charAt(0)
+                      .toUpperCase()
                   : "U"}
+
               </div>
 
+
               {/* User Details */}
+
               <div className="min-w-0">
+
                 <p className="truncate text-sm font-semibold text-white">
                   {user.name}
                 </p>
@@ -157,14 +232,23 @@ export default function Sidebar() {
                     {user.role}
                   </p>
                 )}
+
               </div>
+
             </div>
+
           </div>
         )}
 
-        {/* Model Info */}
+
+        {/* ======================================
+            AI Model Information
+        ====================================== */}
+
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+
           <div className="mb-3 flex items-center gap-2">
+
             <BrainCircuit
               size={18}
               className="text-blue-400"
@@ -173,34 +257,47 @@ export default function Sidebar() {
             <p className="text-sm font-medium">
               AI Model
             </p>
+
           </div>
+
 
           <p className="text-xs text-slate-400">
             Random Forest Classifier
           </p>
 
+
           <div className="mt-3 flex items-center gap-2">
+
             <span className="h-2 w-2 rounded-full bg-green-500" />
 
             <span className="text-xs text-green-400">
               Model Active
             </span>
+
           </div>
+
         </div>
 
-        {/* Logout Button */}
+
+        {/* ======================================
+            Logout Button
+        ====================================== */}
+
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
         >
+
           <LogOut size={19} />
 
           <span>
             Logout
           </span>
+
         </button>
 
       </div>
+
     </aside>
   );
 }

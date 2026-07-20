@@ -9,7 +9,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 
 from database import Base
-
+from datetime import datetime
 
 # =========================
 # Customer Table
@@ -86,8 +86,8 @@ class Prediction(Base):
     )
 
     created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
+    DateTime,
+    default=datetime.utcnow
     )
 
 class User(Base):

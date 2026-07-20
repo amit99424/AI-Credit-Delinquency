@@ -73,11 +73,19 @@ export async function getCustomers() {
 
 /*
 ==========================================
-Get All Predictions
+Get Predictions
+Pagination Supported
+
+Default:
+Page 1
+50 Predictions
 ==========================================
 */
 
-export async function getPredictions() {
+export async function getPredictions(
+  page: number = 1,
+  limit: number = 50
+) {
   const token = getToken();
 
   if (!token) {
@@ -85,24 +93,34 @@ export async function getPredictions() {
     throw new Error("Authentication required");
   }
 
-  const response = await fetch(`${API_URL}/predictions`, {
-    method: "GET",
+  const response = await fetch(
+    `${API_URL}/predictions?page=${page}&limit=${limit}`,
+    {
+      method: "GET",
 
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
 
-  if (response.status === 401 || response.status === 403) {
+  if (
+    response.status === 401 ||
+    response.status === 403
+  ) {
     handleAuthError();
-    throw new Error("Session expired. Please login again.");
+
+    throw new Error(
+      "Session expired. Please login again."
+    );
   }
 
   const data = await response.json();
 
   if (!response.ok) {
     throw new Error(
-      data.detail || "Failed to fetch predictions"
+      data.detail ||
+        "Failed to fetch predictions"
     );
   }
 
@@ -200,6 +218,86 @@ export async function createPrediction(
   if (result.status === "error") {
     throw new Error(
       result.error || "Prediction failed"
+    );
+  }
+
+  return result;
+}
+
+
+/*
+==========================================
+Create Bulk AI Predictions
+Maximum 500 Customers
+==========================================
+*/
+
+export async function createBulkPredictions(
+  customers: Record<string, string | number>[]
+) {
+  const token = getToken();
+
+  if (!token) {
+    handleAuthError();
+    throw new Error("Authentication required");
+  }
+
+  // Validate customer count
+  if (customers.length === 0) {
+    throw new Error(
+      "No customers found in CSV"
+    );
+  }
+
+  if (customers.length > 500) {
+    throw new Error(
+      "Maximum 500 customers are allowed per bulk prediction"
+    );
+  }
+
+  const response = await fetch(
+    `${API_URL}/predict/bulk`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+
+      body: JSON.stringify({
+        customers,
+      }),
+    }
+  );
+
+  // Handle expired/invalid JWT
+  if (
+    response.status === 401 ||
+    response.status === 403
+  ) {
+    handleAuthError();
+
+    throw new Error(
+      "Session expired. Please login again."
+    );
+  }
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.detail ||
+        result.message ||
+        "Bulk prediction failed"
+    );
+  }
+
+  if (result.status === "error") {
+    throw new Error(
+      result.error ||
+        result.message ||
+        "Bulk prediction failed"
     );
   }
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -21,25 +22,24 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.detail || "Login failed"
+          data.detail ||
+            data.message ||
+            "Login failed"
         );
       }
 
@@ -92,6 +92,7 @@ export default function LoginPage() {
           onSubmit={handleLogin}
           className="space-y-5"
         >
+          {/* Email */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-300">
               Email Address
@@ -109,6 +110,7 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* Password */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-300">
               Password
@@ -126,6 +128,7 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* Error Message */}
           {error && (
             <div className="rounded-lg border border-red-800 bg-red-950/50 p-3">
               <p className="text-sm text-red-400">
@@ -134,6 +137,7 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Login Button */}
           <button
             type="submit"
             disabled={loading}
@@ -145,10 +149,23 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-slate-500">
+        {/* Sign Up Link */}
+        <p className="mt-6 text-center text-sm text-slate-400">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/signup"
+            className="font-medium text-blue-400 transition hover:text-blue-300"
+          >
+            Create Account
+          </Link>
+        </p>
+
+        {/* Footer */}
+        <p className="mt-4 text-center text-xs text-slate-500">
           Secure AI-powered credit risk intelligence
         </p>
       </div>
     </div>
   );
 }
+
